@@ -1,0 +1,91 @@
+/* devlop a simple command line*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#define MAX_LINE 1024
+#define MAX_ARGS 64
+
+// Function to parse the command line
+char **parse_command(char *line) {
+    int bufsize = 64, position = 0;
+    char **tokens = malloc(bufsize * sizeof(char*));
+    char *token, **tokens_backup;
+
+    if (!tokens) {
+        fprintf(stderr, "lsh: allocation error\n");
+        exit(EXIT_FAILURE);
+    }
+
+    token = strtok(line, " ");
+    while (token != NULL) {
+        tokens[position] = token;
+        position++;
+
+        if (position >= bufsize) {
+            bufsize += 64;
+            tokens_backup = tokens;
+            tokens = realloc(tokens, bufsize * sizeof(char*));
+            if (!tokens) {
+                free(tokens_backup);
+                fprintf(stderr, "lsh: allocation error\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        token = strtok(NULL, " ");
+    }
+    tokens[position] = NULL;
+    return tokens;
+}
+
+// Function to execute a command
+void execute_command(char **args) {
+    pid_t pid, wpid;
+    int status;
+
+    pid = fork();
+    if (pid == 0) {
+        // Child process
+        if (execvp(args[0], args) == -1) {
+            perror("lsh");
+        }
+        exit(EXIT_FAILURE);
+    } else if (pid < 0) {
+        // Error forking
+        perror("lsh");
+    } else {
+        // Parent process
+        do {
+            wpid = waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+}
+
+// Function to handle the shell
+void shell() {
+    char *line;
+    char **args;
+    int status;
+
+    do {
+        printf("> ");
+        line = NULL;
+        ssize_t bufsize = 0;
+        getline(&line, &bufsize, stdin);
+        args = parse_command(line);
+        status = execute_command(args);
+
+        free(line);
+        free(args);
+    } while (status == 0);
+}
+
+int main() {
+    shell();
+    return 0;
+}
+
